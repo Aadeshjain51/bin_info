@@ -69,6 +69,7 @@ class Binary {
 		uint64_t		entry;		/* Entry point of the binary*/
 		std :: vector <Section> sections;	/* All sections in binary file */
 		std :: vector <Symbol>	symbols;	/* All symbols in binary file */	
+
 		Binary() : type(BIN_TYPE_AUTO), arch(ARCH_NONE), bits(0), entry(0) {}
 
 		/* Return pointer to .text section of binary, if locatable */
