@@ -17,24 +17,24 @@ open_bfd(std :: string &fname) {
 	static int	bfd_init_flag = 0;
 
 	if ( !bfd_init_flag ) {
-		bfd_init();		/* Initialize internal data structures of libbfd */
-		bfd_init_flag = 1;	/* Set flag appropriatly */
+		bfd_init();		/* initialize internal data structures of libbfd */
+		bfd_init_flag = 1;	/* set flag appropriatly */
 	}
 
 	if ( !( bfd_h = bfd_openr(fname.c_str(), NULL) ) ) {
-		fprinitf(stderr, "failed to open binary '%s' (%s)\n",
+		fprinitf(stderr, "[!!] Failed to open binary '%s' (%s)\n",
 			 fname.c_str(), bfd_errmsg(bfd_get_error()));
 		return NULL;
 	}
 
 	/* bfd_object: describes executable, relocatable object or shared library */
 	if ( !bfd_check_format(bfd_h, bfd_object) ) {
-		fprintf(stderr, "file '%s' does not appear to be an executable (%s)\n",
+		fprintf(stderr, "[!!] File '%s' does not appear to be an executable (%s)\n",
 			fname.c_str(), bfd_errmsg(bfd_get_error()));
 		return NULL;
 	}
 
-	/* Some versions of bfd_check_format set a wrong format error before detecting 
+	/* some versions of bfd_check_format set a wrong format error before detecting 
 	 * format and then neglect to unset it once format has been detected, we unset
 	 * it manually to prevent issues.
 	 */
@@ -42,12 +42,82 @@ open_bfd(std :: string &fname) {
 
 	/* bfd flavours: binary format (elf, coff, msdos, mach_o, etc. ) */
 	if ( bfd_get_flavour(bfd_h) == bfd_target_unkown_flavour ) {
-		fprintf(stderr, "unrecognized format for binary '%s' (%s)\n",
+		fprintf(stderr, "[!!] Unrecognized format for binary '%s' (%s)\n",
 			fname.c_str(), bfd_errmsg(bfd_get_error()));
 		return NULL;
 	}
 
 	return bfd_h;
+}
+/* FUNCTION: load_symbols_bfd
+ * INPUT ARGUMENTS:
+ * 	bfd_h	: binary's bfd header
+ * 	bin	: binary object
+ * PROCESS:
+ * 	a) read size of symbol table in binary file
+ * 	b) allocate heap space to store symbol table entries
+ * 	c) read symbol table
+ * 	d) filter out symbols associated with functions
+ * 	e) return
+ * RETURN VALUE:
+ * 	static int : status code
+ * 		 0 - success
+ * 		-1 - failure 
+ */
+static int
+load_symbols_bfd(bfd *bfd_h, Binary *bin) {
+	int	ret;
+	long	n, nsyms, i;		/* n: total size of symbol table (in bytes)
+					 * nsysm: number of symbols in binary
+					 * i: loop iterator
+					 */
+	asymobl	**bfd_symtab;		/* symbol table */
+	Symbol	*sym;			/* single symbol instance */
+
+	bfd_symtab = NULL;
+
+	/* get size of symbol table */
+	if ( ( n = bfd_get_symtab_upper_bound(bfd_h) ) < 0 ) {
+		fprintf(stderr, "[!!] Failed to read symtab (%s)\n",
+			bfd_errmsg(bfd_get_error()));
+		goto fail;
+	} else if ( n ) {
+		/* allocate memory for symbol table */
+		if ( !( bfd_symtab = (asymbol **) malloc(n) ) ) {
+			fprintf(stderr, "[!!] Out of memory\n");
+			goto fail;
+		}
+
+		/* read symbols from binary */
+		if ( ( nsyms = bfd_canonicalize_symtab(bfd_h, bfd_symtab) ) < 0 ) {
+			fprintf(stderr, "[!!] Failed to read symbols table (%s)\n",
+				bfd_errmsg(bfd_get_error()));
+			goto fail;
+		}
+
+		/* filter the symbols relating to functions */
+		for ( i = 0; i < nsyms; ++i ) {
+			if ( bfd_symtab[i] -> flag & BSF_FUNCTION ) {
+				bin -> symbols.push_back(Symbol());
+				sym = &bin -> symbols.back();
+	
+				sym -> type = Symbol :: SYM_TYPE_FUN;
+				sym -> name = std :: string(bfd_symtab[i] -> name);
+				sym -> addr = bfd_asymbol_value(bfd_symtab[i]);
+			}
+		}
+	}
+
+	ret = 0;
+	goto cleanup;
+
+	fail:
+		ret = -1;
+	cleanup:
+		if ( bfd_symtab )
+			free(bfd_symtab);
+
+	return ret;
 }
 
 /* FUNCTION: load_binary_bfd
@@ -81,11 +151,11 @@ load_binary_bfd(std :: string fname, Binary *bin, Binary :: BinaryType type) {
 		goto fail;
 	}
 
-	/* Setting general information */
+	/* setting general information */
 	bin -> filename	= std :: string(name);			/* executable name */
 	bin -> entry	= bfd_get_start_address(bfd_h);		/* executable entry point */
 
-	/* Setting appropriate executable type */
+	/* setting appropriate executable type */
 	bin -> type_str = std :: string(bfd_h -> xvec -> name);
 
 	switch ( bfd -> xvec -> flavour ) {
@@ -101,7 +171,7 @@ load_binary_bfd(std :: string fname, Binary *bin, Binary :: BinaryType type) {
 			goto fail;
 	}
 
-	/* Setting appropriate executable architecture */
+	/* setting appropriate executable architecture */
 	bfd_info	= bfd_get_arch_info(bfd_h);
 	bfd -> arch_str = std :: string(bfd_info -> printable_name);
 
@@ -119,8 +189,8 @@ load_binary_bfd(std :: string fname, Binary *bin, Binary :: BinaryType type) {
 		       goto fail;
 	}
 
-	/* Symbols may not be present if the binary is stripped */
-	load_symbols_bfd(bfd_h, bin);	/* TODO */
+	/* symbols may not be present if the binary is stripped */
+	load_symbols_bfd(bfd_h, bin);
 	load_dynsym_bfd(bfd_h, bin);	/* TODO */
 
 	if ( load_sections_bfd(bfd_h, bin)  /* TODO */ < 0 ) goto fail;
