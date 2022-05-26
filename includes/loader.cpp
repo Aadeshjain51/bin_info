@@ -49,16 +49,17 @@ open_bfd(std :: string &fname) {
 
 	return bfd_h;
 }
+
 /* FUNCTION: load_symbols_bfd
  * INPUT ARGUMENTS:
- * 	bfd_h	: binary's bfd header
- * 	bin	: binary object
+ * 	bfd_h	: binary's bfd headera (bfd internal representation)
+ * 	bin	: binary's object (program internal representation)
  * PROCESS:
  * 	a) read size of symbol table in binary file
  * 	b) allocate heap space to store symbol table entries
  * 	c) read symbol table
  * 	d) filter out symbols associated with functions
- * 	e) return
+ * 	e) cleanup and return
  * RETURN VALUE:
  * 	static int : status code
  * 		 0 - success
@@ -95,12 +96,14 @@ load_symbols_bfd(bfd *bfd_h, Binary *bin) {
 			goto fail;
 		}
 
-		/* filter the symbols relating to functions */
 		for ( i = 0; i < nsyms; ++i ) {
+			/* filter the dynamic symbols associated with functions */
 			if ( bfd_symtab[i] -> flag & BSF_FUNCTION ) {
+				/* create program internal instance of symbol */
 				bin -> symbols.push_back(Symbol());
 				sym = &bin -> symbols.back();
 	
+				/* populate information in instance of symbol */
 				sym -> type = Symbol :: SYM_TYPE_FUN;
 				sym -> name = std :: string(bfd_symtab[i] -> name);
 				sym -> addr = bfd_asymbol_value(bfd_symtab[i]);
@@ -114,17 +117,169 @@ load_symbols_bfd(bfd *bfd_h, Binary *bin) {
 	fail:
 		ret = -1;
 	cleanup:
-		if ( bfd_symtab )
-			free(bfd_symtab);
+		if ( bfd_symtab ) free(bfd_symtab);
 
 	return ret;
+}
+
+/* FUNCTION: load_dynsym_bfd
+ * INPUT ARGUMENTS:
+ * 	bfd_h	: binary's bfd headera (bfd internal representation)
+ * 	bin	: binary's object (program internal representation)
+ * PROCESS:
+ * 	a) read size of dynamic symbol table in binary file
+ * 	b) allocate heap space to store dynamic symbol table entries
+ * 	c) read dynamic symbol table
+ * 	d) filter out dynamic symbols associated with functions
+ * 	e) cleanup and return
+ * RETURN VALUE:
+ * 	static int : status code
+ * 		 0 - success
+ * 		-1 - failure 
+ */
+static int
+load_dynsym_bfd(bfd *bfd_h, Binary *bin) {
+	int	ret;
+	long	n, nsyms, i;		/* n: total size of dynamic symbol table (in bytes)
+					 * nsysm: number of dynamic symbols in binary
+					 * i: loop iterator
+					 */
+	asymobl	**bfd_dynsym;		/* dynamic symbol table */
+	Symbol	*sym;			/* single symbol instance */
+
+	bfd_dynsym = NULL;
+
+	/* get size of dynamic symbol table */
+	if ( ( n = bfd_get_dynamic_symtab_upper_bound(bfd_h) ) < 0 ) {
+		fprintf(stderr, "[!!] Failed to read dynamic symtab (%s)\n",
+			bfd_errmsg(bfd_get_error()));
+		goto fail;
+	} else if ( n ) {
+		/* allocate memory for dynamic symbol table */
+		if ( !( bfd_dynsym = (asymobl **)malloc(n) ) ) {
+			fprintf(stderr, "[!!] Out of memory\n");
+			goto fail;
+		}
+
+		/* read dynamic symbols from binary */
+		if ( ( nsyms = bfd_canonicalize_dynamic_symtab(bfd_h, bfd_dynsym) ) < 0 ) {
+			fprintf(stderr, "[!!] Failed to read dynamic symbol table (%s)\n",
+				bfd_errmsg(bfd_get_error()));
+			goto fail;
+		}
+		
+		for ( i = 0; i < nsyms; ++i ) {
+			/* filter the dynamic symbols associated with functions */
+			if ( bfd_dynsym[i] -> flags & BSF_FUNCTION ) {
+				/* create program internal instance of symbol */
+				bin -> symbols.push_back(Symbol());
+				sym = &bin -> symbols.back();
+
+				/* populate information in instance of symbol */
+				sym -> type = Symbol :: SYM_TYPE_FUN;
+				sym -> name = std :: string(bfd_dynsym[i] -> name);
+				sym -> addr = bfd_asymbol_value(bfd_dynsym[i]);
+			}
+		}
+	}
+
+	ret = 0;
+	goto cleanup;
+
+	fail:
+		ret = -1;
+	
+	cleanup:
+		if ( bfd_dynsym ) free(bfd_dynsym);
+	
+	return ret;
+}
+
+/* FUNCTION: load_sections_bfd
+ * INPUT ARGUMENTS:
+ * 	bfd_h	: binary's bfd headera (bfd internal representation)
+ * 	bin	: binary's object (program internal representation)
+ * PROCESS:
+ * 	a) for each node in linked list representation of sections of binary
+ * 		a1) retrieve section flags and set appropriate section type
+ * 		a2) retrieve section virtual memory address, size, and name
+ * 		a3) populate information in program internal representation of binary section
+ * 		a4) allocate size to store section contents
+ * 		a5) retrieve section contents and store them
+ * RETURN VALUE:
+ * 	static int : status code
+ * 		 0 - success
+ * 		-1 - failure 
+ */
+static int
+load_sections_bfd(bfd *bfd_h, Binary *bin) {
+	int			bfd_flags;	/* flags of given section. eg: code, data */
+	uint64_t		vma, size;	/* vma: virtual memory address to load the seciton at
+						 * size: size of section to load
+						 */
+	const char		*secname;	/* section name */
+	asection		*bfd_sec;	/* bfd internal representation of section */
+	Section			*sec;		/* program internal representation of section */
+	Section	:: SectionType	sectype;	/* program internal representation of section type */
+
+
+	for ( bfd_sec = bfd_h -> sections; bfd_sec; bfd_sec = bfd_sec -> next ) {
+		bfd_flags	= bfd_section_flags(bfd_sec);
+
+
+		/* set appropriate section type */
+		sectype		= Section :: SEC_TYPE_NONE;
+		/* if the current section belongs to one of the code sections */
+		if ( bfd_flags & SEC_CODE ) {
+			sectype = Section :: SEC_TYPE_CODE;
+		/* if the current section belongs to one of the data sections */
+		} else if ( bfd_flags & SEC_DATA ) {
+			sectype = Section :: SEC_TYPE_DATA;
+		/* if the current section belongs to none of the code or data sections */
+		} else {
+			/* skip further processing and go for next section */
+			continue;
+		}
+
+		vma	= bfd_section_vma(bfd_sec);	/* get virtual memory address */
+		size	= bfd_section_size(bfd_sec);	/* get size of section */
+		secname = bfd_section_name(bfd_sec);	/* get section name */
+
+		if ( !secname ) secname = "<unnamed>";	/* if failed to retrieve section name */
+
+		/* create program internal instance of section for binary */
+		bin -> sections.push_back(Section());
+		sec = &bin -> sections.back();
+
+		/* populate information in instance of section */
+		sec -> binary	= bin;
+		sec -> name	= std :: string(secname);
+		sec -> type	= sectype;
+		sec -> vma	= vma;
+		sec -> size	= size;
+	
+		/* allocate memory to store section contents */
+		if ( !( sec -> bytes = (uint8_t *)malloc(size) ) ) {
+			fprintf(stderr, "[!!] Out of memory\n");
+			return -1;
+		}
+
+		/* retrieve section contents */
+		if ( !bfd_get_section_contents(bfd_h, bfd_sec, sec -> bytes, 0, size) ) {
+			fprintf(stderr, "[!!] Failed to read section '%s' (%s)\n",
+				secname, bfd_errmsg(bfd_get_error()));
+			return -1;
+		}
+	}
+
+	return 0;
 }
 
 /* FUNCTION: load_binary_bfd
  * INPUT ARGUMENTS:
  * 	fname	: name of binary file to load
- * 	bin	: structure to hold information of binary file
- *	type	: enum to set value in bin for type of the binary file
+ * 	bin	: binary's object (program internal representation)
+ * 	type	: supported types of binary file
  * PROCESS:
  * 	a) set filename and entry point in bin
  * 	b) set executalbe type in bin
@@ -190,10 +345,11 @@ load_binary_bfd(std :: string fname, Binary *bin, Binary :: BinaryType type) {
 	}
 
 	/* symbols may not be present if the binary is stripped */
-	load_symbols_bfd(bfd_h, bin);
-	load_dynsym_bfd(bfd_h, bin);	/* TODO */
+	load_symbols_bfd(bfd_h, bin);	/* attempt to load static symbols */
+	load_dynsym_bfd(bfd_h, bin);	/* attempt to load dynamic symbols */
 
-	if ( load_sections_bfd(bfd_h, bin)  /* TODO */ < 0 ) goto fail;
+	/* attempt to load sections */
+	if ( load_sections_bfd(bfd_h, bin) < 0 ) goto fail;
 
 	ret = 0;
 	goto cleanup;
@@ -210,7 +366,7 @@ load_binary_bfd(std :: string fname, Binary *bin, Binary :: BinaryType type) {
 /* FUNCTION: load_binary
  * INPUT ARGUMENTS:
  * 	fname	: name of binary file to examine
- * 	bin	: structure to load information into
+ * 	bin	: binary's object (program internal representation)
  * 	type	: supported types of binary file
  * PROCESS:
  * 	a) load the binary and examine
@@ -225,12 +381,21 @@ load_binary(std :: string &fname, Binary *bin, Binary :: BinaryType type) {
 }
 
 /* FUNCTION: unload_binary
- * INPUT ARGUMENTS: TBD
- * PROCESS: TBD
- * RETURN VALUE: TBD
+ * INPUT ARGUMENTS:
+ * 	bin	: binary's object (program internal representation)
+ * PROCESS:
+ * 	a) for each section in binary's object
+ * 		a1) free space allocated to store its contents
+ * RETURN VALUE: NONE
  */
 void
-unload_binary(void) {
-	/* TODO */
-	return;
+unload_binary(Binary *bin) {
+	size_t	i;	/* loop iterator */
+	Section *sec;	/* program internal representation of sections */
+
+	for ( i = 0; i < bin -> sections.size(); ++i ) {
+		sec = &bin -> sections[i];	/* get the section in binary */
+		if ( sec -> bytes )
+			free(sec -> bytes);	/* de-allocate memory space used to store its contents */
+	}
 }
