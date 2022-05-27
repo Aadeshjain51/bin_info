@@ -1,5 +1,5 @@
 #include <bfd.h>
-#include <loader.h>
+#include "loader.hpp"
 
 /* FUNCTION: open_bfd
  * INPUT ARGUMENTS:
@@ -22,7 +22,7 @@ open_bfd(std :: string &fname) {
 	}
 
 	if ( !( bfd_h = bfd_openr(fname.c_str(), NULL) ) ) {
-		fprinitf(stderr, "[!!] Failed to open binary '%s' (%s)\n",
+		fprintf(stderr, "[!!] Failed to open binary '%s' (%s)\n",
 			 fname.c_str(), bfd_errmsg(bfd_get_error()));
 		return NULL;
 	}
@@ -41,7 +41,7 @@ open_bfd(std :: string &fname) {
 	bfd_set_error(bfd_error_no_error);
 
 	/* bfd flavours: binary format (elf, coff, msdos, mach_o, etc. ) */
-	if ( bfd_get_flavour(bfd_h) == bfd_target_unkown_flavour ) {
+	if ( bfd_get_flavour(bfd_h) == bfd_target_unknown_flavour ) {
 		fprintf(stderr, "[!!] Unrecognized format for binary '%s' (%s)\n",
 			fname.c_str(), bfd_errmsg(bfd_get_error()));
 		return NULL;
@@ -72,7 +72,7 @@ load_symbols_bfd(bfd *bfd_h, Binary *bin) {
 					 * nsysm: number of symbols in binary
 					 * i: loop iterator
 					 */
-	asymobl	**bfd_symtab;		/* symbol table */
+	asymbol	**bfd_symtab;		/* symbol table */
 	Symbol	*sym;			/* single symbol instance */
 
 	bfd_symtab = NULL;
@@ -98,7 +98,7 @@ load_symbols_bfd(bfd *bfd_h, Binary *bin) {
 
 		for ( i = 0; i < nsyms; ++i ) {
 			/* filter the dynamic symbols associated with functions */
-			if ( bfd_symtab[i] -> flag & BSF_FUNCTION ) {
+			if ( bfd_symtab[i] -> flags & BSF_FUNCTION ) {
 				/* create program internal instance of symbol */
 				bin -> symbols.push_back(Symbol());
 				sym = &bin -> symbols.back();
@@ -144,7 +144,7 @@ load_dynsym_bfd(bfd *bfd_h, Binary *bin) {
 					 * nsysm: number of dynamic symbols in binary
 					 * i: loop iterator
 					 */
-	asymobl	**bfd_dynsym;		/* dynamic symbol table */
+	asymbol	**bfd_dynsym;		/* dynamic symbol table */
 	Symbol	*sym;			/* single symbol instance */
 
 	bfd_dynsym = NULL;
@@ -156,7 +156,7 @@ load_dynsym_bfd(bfd *bfd_h, Binary *bin) {
 		goto fail;
 	} else if ( n ) {
 		/* allocate memory for dynamic symbol table */
-		if ( !( bfd_dynsym = (asymobl **)malloc(n) ) ) {
+		if ( !( bfd_dynsym = (asymbol **)malloc(n) ) ) {
 			fprintf(stderr, "[!!] Out of memory\n");
 			goto fail;
 		}
@@ -307,13 +307,13 @@ load_binary_bfd(std :: string fname, Binary *bin, Binary :: BinaryType type) {
 	}
 
 	/* setting general information */
-	bin -> filename	= std :: string(name);			/* executable name */
+	bin -> filename	= std :: string(fname);			/* executable name */
 	bin -> entry	= bfd_get_start_address(bfd_h);		/* executable entry point */
 
 	/* setting appropriate executable type */
 	bin -> type_str = std :: string(bfd_h -> xvec -> name);
 
-	switch ( bfd -> xvec -> flavour ) {
+	switch ( bfd_h -> xvec -> flavour ) {
 		case bfd_target_elf_flavour:
 			bin -> type = Binary :: BIN_TYPE_ELF;
 			break;
@@ -328,7 +328,7 @@ load_binary_bfd(std :: string fname, Binary *bin, Binary :: BinaryType type) {
 
 	/* setting appropriate executable architecture */
 	bfd_info	= bfd_get_arch_info(bfd_h);
-	bfd -> arch_str = std :: string(bfd_info -> printable_name);
+	bin -> arch_str = std :: string(bfd_info -> printable_name);
 
 	switch ( bfd_info -> mach ) {
 		case bfd_mach_i386_i386:

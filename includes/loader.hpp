@@ -85,4 +85,6 @@ class Binary {
 int load_binary(std :: string &fname, Binary *bin, Binary :: BinaryType type);
 
 /* Unload binary, once inspection completes */
-void unload_binary(Binary *bin)
+void unload_binary(Binary *bin);
+
+#endif /* BIN_LOADER_H */
