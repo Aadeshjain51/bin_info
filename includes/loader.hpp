@@ -5,6 +5,8 @@
 #include <string>
 #include <vector>
 
+#define MAX_SYM_NAME_LEN	38		/* maximum length of a symbol name to be displayed upto */
+
 class Binary;
 class Section;
 class Symbol;
@@ -13,11 +15,14 @@ class Symbol;
 class Symbol {
 	public:
 		enum SymbolType {		/* Type of symbol */
-			SYM_TYPE_UNK	= 0,	/* Unkown symbol type */
-			SYM_TYPE_FUN	= 1	/* Function symbol */
+			SYM_TYPE_UNK	= 0x0,	/* Unkown symbol type */
+			SYM_TYPE_FUN	= 0x1,	/* Function symbol */
+			SYM_TYPE_LOC	= 0x2,	/* Local symbol */
+			SYM_TYPE_GLB	= 0x4,	/* Global symbol */
+			SYM_TYPE_DBG	= 0x8	/* Debugging symbol */
 		};
 
-		SymbolType	type;
+		uint8_t		type;
 		std :: string	name;	/* Symbol name */
 		uint64_t	addr;	/* address of symbol */
 

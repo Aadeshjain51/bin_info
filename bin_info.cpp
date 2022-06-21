@@ -43,6 +43,8 @@ main(int argc, char **argv) {
 		bin.type_str.c_str(), bin.arch_str.c_str(),
 		bin.bits, bin.entry);
 
+	printf("[*] Scanned section headers:\n");
+	printf(" %s %13s %8s %20s\n", &"VIRT ADDR", &"SIZE", &"NAME", &"TYPE");
 	for ( i = 0; i < bin.sections.size(); ++i ) {
 		sec = &bin.sections[i];
 		printf(" 0x%016jx %-8ju %-20s %s\n",
@@ -52,11 +54,21 @@ main(int argc, char **argv) {
 
 	if ( bin.symbols.size() > 0 ) {
 		printf("[*] Scanned symbol tables:\n");
+		printf(" %-40s %18s %19s\n", &"NAME", &"ADDRESS", &"SYMBOL TYPE");
+		
 		for ( i = 0; i < bin.symbols.size(); ++i ) {
 			sym = &bin.symbols[i];
-			printf(" %-40s 0x%016jx %s\n",
-				sym -> name.c_str(), sym -> addr,
-				sym -> type & Symbol :: SYM_TYPE_FUN ? "FUNCTION" : "");
+
+			printf(" %-40s 0x%016jx ", sym -> name.c_str(), sym -> addr);
+			if ( sym -> type & Symbol :: SYM_TYPE_FUN )
+				printf("%20s", &"FUNCTION");
+			if ( sym -> type & Symbol :: SYM_TYPE_LOC )
+				printf("%20s", &"LOCAL-SYMBOL");
+			if ( sym -> type & Symbol :: SYM_TYPE_GLB )
+				printf("%20s", &"GLOBAL-SYMBOL");
+			if ( sym -> type & Symbol :: SYM_TYPE_DBG )
+				printf("%20s", &"DEBUGGING-SYMBOL");
+			printf("\n");
 		}
 	}
 

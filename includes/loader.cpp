@@ -52,13 +52,13 @@ open_bfd(std :: string &fname) {
 
 /* FUNCTION: load_symbols_bfd
  * INPUT ARGUMENTS:
- * 	bfd_h	: binary's bfd headera (bfd internal representation)
+ * 	bfd_h	: binary's bfd headers (bfd internal representation)
  * 	bin	: binary's object (program internal representation)
  * PROCESS:
  * 	a) read size of symbol table in binary file
  * 	b) allocate heap space to store symbol table entries
  * 	c) read symbol table
- * 	d) filter out symbols associated with functions
+ * 	d) tag function symbols, local & global symbols and debugging symbols
  * 	e) cleanup and return
  * RETURN VALUE:
  * 	static int : status code
@@ -72,8 +72,8 @@ load_symbols_bfd(bfd *bfd_h, Binary *bin) {
 					 * nsysm: number of symbols in binary
 					 * i: loop iterator
 					 */
-	asymbol	**bfd_symtab;		/* symbol table */
-	Symbol	*sym;			/* single symbol instance */
+	asymbol		**bfd_symtab;	/* symbol table */
+	Symbol		*sym;		/* single symbol instance */
 
 	bfd_symtab = NULL;
 
@@ -97,17 +97,36 @@ load_symbols_bfd(bfd *bfd_h, Binary *bin) {
 		}
 
 		for ( i = 0; i < nsyms; ++i ) {
-			/* filter the dynamic symbols associated with functions */
-			if ( bfd_symtab[i] -> flags & BSF_FUNCTION ) {
-				/* create program internal instance of symbol */
-				bin -> symbols.push_back(Symbol());
-				sym = &bin -> symbols.back();
-	
-				/* populate information in instance of symbol */
-				sym -> type = Symbol :: SYM_TYPE_FUN;
-				sym -> name = std :: string(bfd_symtab[i] -> name);
-				sym -> addr = bfd_asymbol_value(bfd_symtab[i]);
+			/* create program internal instance of symbol */
+			bin -> symbols.push_back(Symbol());
+			sym = &bin -> symbols.back();
+			
+			/* populate information in instance of symbol */
+			sym -> name = std :: string(bfd_symtab[i] -> name);
+
+			/* format symbol name if too large */
+			if ( sym -> name.size() > MAX_SYM_NAME_LEN ) {
+				sym -> name[36] = '.';
+				sym -> name[37] = '.';
+				sym -> name[38] = '.';
+				sym -> name[39] = '\0';
 			}
+
+
+			sym -> addr = bfd_asymbol_value(bfd_symtab[i]);
+
+			/* dynamic symbols associated with functions */
+			if ( bfd_symtab[i] -> flags & BSF_FUNCTION )
+				sym -> type = sym -> type | Symbol :: SYM_TYPE_FUN;
+			/* dynamic symbols associated with local symbols */
+			if ( bfd_symtab[i] -> flags & BSF_LOCAL)
+				sym -> type = sym -> type | Symbol :: SYM_TYPE_LOC;
+			/* dynamic symbols associated with global symbols */
+			if ( bfd_symtab[i] -> flags & BSF_GLOBAL)
+				sym -> type = sym -> type | Symbol :: SYM_TYPE_GLB;
+			/* dynamic symbols associated with debugging symbols */
+			if ( bfd_symtab[i] -> flags & BSF_DEBUGGING )
+				sym -> type = sym -> type | Symbol :: SYM_TYPE_DBG;
 		}
 	}
 
@@ -124,13 +143,13 @@ load_symbols_bfd(bfd *bfd_h, Binary *bin) {
 
 /* FUNCTION: load_dynsym_bfd
  * INPUT ARGUMENTS:
- * 	bfd_h	: binary's bfd headera (bfd internal representation)
+ * 	bfd_h	: binary's bfd headers (bfd internal representation)
  * 	bin	: binary's object (program internal representation)
  * PROCESS:
  * 	a) read size of dynamic symbol table in binary file
  * 	b) allocate heap space to store dynamic symbol table entries
  * 	c) read dynamic symbol table
- * 	d) filter out dynamic symbols associated with functions
+ * 	d) tag function symbols, local & global symbols and debugging symbols
  * 	e) cleanup and return
  * RETURN VALUE:
  * 	static int : status code
@@ -169,17 +188,35 @@ load_dynsym_bfd(bfd *bfd_h, Binary *bin) {
 		}
 		
 		for ( i = 0; i < nsyms; ++i ) {
-			/* filter the dynamic symbols associated with functions */
-			if ( bfd_dynsym[i] -> flags & BSF_FUNCTION ) {
-				/* create program internal instance of symbol */
-				bin -> symbols.push_back(Symbol());
-				sym = &bin -> symbols.back();
+			/* create program internal instance of symbol */
+			bin -> symbols.push_back(Symbol());
+			sym = &bin -> symbols.back();
+			
+			/* populate information in instance of symbol */
+			sym -> name = std :: string(bfd_dynsym[i] -> name);
 
-				/* populate information in instance of symbol */
-				sym -> type = Symbol :: SYM_TYPE_FUN;
-				sym -> name = std :: string(bfd_dynsym[i] -> name);
-				sym -> addr = bfd_asymbol_value(bfd_dynsym[i]);
+			/* format symbol name if too large */
+			if ( sym -> name.size() > MAX_SYM_NAME_LEN ) {
+				sym -> name[36] = '.';
+				sym -> name[37] = '.';
+				sym -> name[38] = '.';
+				sym -> name[39] = '\0';
 			}
+
+			sym -> addr = bfd_asymbol_value(bfd_dynsym[i]);
+
+			/* dynamic symbols associated with functions */
+			if ( bfd_dynsym[i] -> flags & BSF_FUNCTION )
+				sym -> type = Symbol :: SYM_TYPE_FUN;
+			/* dynamic symbols associated with local symbols */
+			if ( bfd_dynsym[i] -> flags & BSF_LOCAL)
+				sym -> type = Symbol :: SYM_TYPE_LOC;
+			/* dynamic symbols associated with global symbols */
+			if ( bfd_dynsym[i] -> flags & BSF_GLOBAL)
+				sym -> type = Symbol :: SYM_TYPE_GLB;
+			/* dynamic symbols associated with debugging symbols */
+			if ( bfd_dynsym[i] -> flags & BSF_DEBUGGING )
+				sym -> type = Symbol :: SYM_TYPE_DBG;
 		}
 	}
 
@@ -197,7 +234,7 @@ load_dynsym_bfd(bfd *bfd_h, Binary *bin) {
 
 /* FUNCTION: load_sections_bfd
  * INPUT ARGUMENTS:
- * 	bfd_h	: binary's bfd headera (bfd internal representation)
+ * 	bfd_h	: binary's bfd headers (bfd internal representation)
  * 	bin	: binary's object (program internal representation)
  * PROCESS:
  * 	a) for each node in linked list representation of sections of binary
@@ -281,9 +318,9 @@ load_sections_bfd(bfd *bfd_h, Binary *bin) {
  * 	bin	: binary's object (program internal representation)
  * 	type	: supported types of binary file
  * PROCESS:
- * 	a) set filename and entry point in bin
- * 	b) set executalbe type in bin
- * 	c) set target architecture type in bin
+ * 	a) set filename and entry point in 'bin'
+ * 	b) set executalbe type in 'bin'
+ * 	c) set target architecture type in 'bin'
  * 	d) load static symbols (if present)
  * 	e) load dynamic symbols
  * 	f) load sections
