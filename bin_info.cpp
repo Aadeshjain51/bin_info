@@ -38,23 +38,28 @@ main(int argc, char **argv) {
 		return 1;
 	}
 
-	printf("[*] Loaded binary '%s' %s/%s (%u bits) entry@0x%016jx\n",
-		bin.filename.c_str(),
-		bin.type_str.c_str(), bin.arch_str.c_str(),
-		bin.bits, bin.entry);
+	/* print information concering entire binary executable */
+	printf("[*] Loaded binary '%s'\n", bin.filename.c_str());
+	printf("[*] Architecture: %s/%s (%u bits)\n", bin.type_str.c_str(), bin.arch_str.c_str(), bin.bits);
+	printf("[*] Entry point: 0x%016jx\n", bin.entry);
 
-	printf("[*] Scanned section headers:\n");
+	/* print information regarding section headers */
+	printf("\n[*] Scanned section headers:\n");
 	printf(" %s %13s %8s %20s\n", &"VIRT ADDR", &"SIZE", &"NAME", &"TYPE");
+	printf(" %s %44s\n", &"RAW BYTES", &"ASCII");
+
 	for ( i = 0; i < bin.sections.size(); ++i ) {
 		sec = &bin.sections[i];
-		printf(" 0x%016jx %-8ju %-20s %s\n",
+		printf("\n 0x%016jx %-8ju %-20s %s\n",
 			sec -> vma, sec -> size, sec -> name.c_str(),
 			sec -> type == Section :: SEC_TYPE_CODE ? "CODE" : "DATA");
+		raw_dump(sec);
 	}
 
+	/* print information regrading symbols (if present) */
 	if ( bin.symbols.size() > 0 ) {
-		printf("[*] Scanned symbol tables:\n");
-		printf(" %-40s %18s %19s\n", &"NAME", &"ADDRESS", &"SYMBOL TYPE");
+		printf("\n[*] Scanned symbol tables:\n");
+		printf(" %-40s %18s %20s\n", &"NAME", &"ADDRESS", &"SYMBOL TYPE");
 		
 		for ( i = 0; i < bin.symbols.size(); ++i ) {
 			sym = &bin.symbols[i];

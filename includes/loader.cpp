@@ -419,7 +419,7 @@ load_binary(std :: string &fname, Binary *bin, Binary :: BinaryType type) {
 
 /* FUNCTION: unload_binary
  * INPUT ARGUMENTS:
- * 	bin	: binary's object (program internal representation)
+ * 	bin : binary's object (program internal representation)
  * PROCESS:
  * 	a) for each section in binary's object
  * 		a1) free space allocated to store its contents
@@ -434,5 +434,50 @@ unload_binary(Binary *bin) {
 		sec = &bin -> sections[i];	/* get the section in binary */
 		if ( sec -> bytes )
 			free(sec -> bytes);	/* de-allocate memory space used to store its contents */
+	}
+}
+
+/* FUNCTION: raw_dump
+ * INPUT ARGUMENTS:
+ * 	sec : section who's content are to be printed as raw bytes
+ * PROCESS:
+ * 	a) for each byte in section
+ * 		a1) print hexadecimal value of each byte
+ * 		a2) print corresponding ascii character if it exists
+ * RETURN VALUE: NONE
+ */
+void
+raw_dump(Section *sec) {
+	size_t		i, j, size;			/* i, j: loop iterators
+					 		* size: size of section
+					 		*/
+	
+	char		line[MAX_LINE_LEN + 1];		/* string to store a line to print */
+	char		ascii_code;			/* single character/byte in section content */
+
+	size = sec -> size;
+
+	/* loop over each byte in section */
+	for ( i = 0; i < size; ++i ) {
+		ascii_code = sec -> bytes[i];
+
+		/* print hex value for each byte */
+		printf(" %02x", (uint8_t)ascii_code);
+		
+		/* add character to print to line and print the line */
+		line[i % MAX_LINE_LEN] = (ascii_code >= 32 && ascii_code <=128) ? ascii_code : '.';
+
+		if ( ( i != 0 && ( i + 1 ) % MAX_LINE_LEN == 0 ) || i == size - 1 ) {
+			line[i % MAX_LINE_LEN + 1] = '\0';
+
+			/* additional space for last line less than maximum length */
+			for ( j = strlen(line); j < MAX_LINE_LEN; ++j )
+				printf("   ");
+
+			/* column to separate hex and character columns */
+			printf("  ");
+
+			printf("%s\n", line);
+		}
 	}
 }

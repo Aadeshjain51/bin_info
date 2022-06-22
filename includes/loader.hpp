@@ -6,6 +6,7 @@
 #include <vector>
 
 #define MAX_SYM_NAME_LEN	38		/* maximum length of a symbol name to be displayed upto */
+#define MAX_LINE_LEN		16		/* maximum length of a line to be printed in raw_dump() */
 
 class Binary;
 class Section;
@@ -91,5 +92,8 @@ int load_binary(std :: string &fname, Binary *bin, Binary :: BinaryType type);
 
 /* Unload binary, once inspection completes */
 void unload_binary(Binary *bin);
+
+/* Print raw bytes of section */
+void raw_dump(Section *sec);
 
 #endif /* BIN_LOADER_H */
