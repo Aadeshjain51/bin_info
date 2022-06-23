@@ -462,7 +462,7 @@ raw_dump(Section *sec) {
 		ascii_code = sec -> bytes[i];
 
 		/* print hex value for each byte */
-		printf(" %02x", (uint8_t)ascii_code);
+		printf(" %02x", (uint8_t) ascii_code);
 		
 		/* add character to print to line and print the line */
 		line[i % MAX_LINE_LEN] = (ascii_code >= 32 && ascii_code <=128) ? ascii_code : '.';
