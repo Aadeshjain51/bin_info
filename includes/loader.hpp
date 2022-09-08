@@ -90,6 +90,9 @@ class Binary {
 /* Load binary for inspection */
 int load_binary(std :: string &fname, Binary *bin, Binary :: BinaryType type);
 
+/* Print the header information of binary */
+void print_binary_header(Binary &bin);
+
 /* Unload binary, once inspection completes */
 void unload_binary(Binary *bin);
 
