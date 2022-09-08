@@ -1,5 +1,6 @@
 # bin_info
-Binary executable file header information viewer written in C++
+Binary executable file header information viewer written in C++.
+
 It uses Binary File Descriptor library (libbfd) for parsing the executable and Capstone (libcaptone) for disassembly.
 
 ## Installation
