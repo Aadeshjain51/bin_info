@@ -30,6 +30,6 @@ foo@bar:~$ ./bin_info -f <binary_file> -l # perform linear disassembly
 ### Linear Disassembly
 <p align="center">
   <kbd>
-    <img src="./images/linear_disasm.png" width="506px" height="218px">
+    <img src="./images/linear_disassembly.png" width="506px" height="218px">
   </kbd>
 <p>
